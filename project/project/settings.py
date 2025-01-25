@@ -52,11 +52,12 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'cloudinary',                      # Cloudinary for media management
+    'cloudinary',                   
     'cloudinary_storage', 
     'rest_framework',
-    'interface',
+    'roomie_property',
     'roomie_user',
+   
 ]
 
 MIDDLEWARE = [
