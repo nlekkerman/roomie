@@ -57,6 +57,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'roomie_property',
     'roomie_user',
+    'cash_flow',
    
 ]
 

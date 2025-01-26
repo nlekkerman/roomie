@@ -26,6 +26,7 @@ class Property(models.Model):
     property_rating = models.DecimalField(max_digits=3, decimal_places=1, default=5.0)
     room_capacity = models.PositiveIntegerField()
     people_capacity = models.PositiveIntegerField()
+    rent_amount = models.DecimalField(max_digits=10, decimal_places=2, null=True)
 
     owner = models.ForeignKey(User, related_name='owned_properties', on_delete=models.CASCADE)
     property_supervisor = models.ForeignKey(User, related_name='supervised_properties', on_delete=models.SET_NULL, null=True, blank=True)

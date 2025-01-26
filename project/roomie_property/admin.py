@@ -11,7 +11,7 @@ class PropertyTenantHistoryInline(admin.TabularInline):
 class PropertyAdmin(admin.ModelAdmin):
     list_display = ('street', 'house_number', 'town', 'county', 'country', 
                     'property_rating', 'room_capacity', 'people_capacity', 
-                    'owner', 'property_supervisor', 'current_tenants_display')
+                    'owner', 'property_supervisor','rent_amount', 'current_tenants_display')
     search_fields = ('street', 'town', 'county', 'country', 
                      'owner__username', 'property_supervisor__username')
 
@@ -20,13 +20,13 @@ class PropertyAdmin(admin.ModelAdmin):
         if obj:  # If editing an existing Property
             fieldsets[0][1]['fields'] = (
                 'street', 'house_number', 'town', 'county', 'country', 
-                'property_rating', 'room_capacity', 'people_capacity', 
+                'property_rating', 'room_capacity', 'people_capacity', 'rent_amount',
                 'owner', 'property_supervisor'
             )
         else:  # When adding a new Property
             fieldsets[0][1]['fields'] = (
                 'street', 'house_number', 'town', 'county', 'country', 
-                'property_rating', 'room_capacity', 'people_capacity', 
+                'property_rating', 'room_capacity', 'people_capacity', 'rent_amount',
                 'owner', 'property_supervisor'
             )
         return fieldsets
