@@ -1,5 +1,5 @@
 from django.db import models
-from roomie_property.models import Property
+from roomie_property.models import Property, PropertyTenantRecords
 from django.utils import timezone
 from django.contrib.auth.models import User
 
@@ -51,12 +51,25 @@ class CustomUser(models.Model):
                         address=old_address, 
                         end_date__isnull=True
                     ).update(end_date=timezone.now())
+                    
+                    if old_address:
+                        PropertyTenantRecords.objects.filter(
+                            tenant=self.user,
+                            property=old_address,
+                            end_date__isnull=True
+                        ).update(end_date=timezone.now())
 
                 # Add new address to address history
                 if self.address:
                     AddressHistory.objects.create(
                         user=self, 
                         address=self.address, 
+                        start_date=timezone.now()
+                    )
+                    # Record the new tenant history when a user is assigned to a new property
+                    PropertyTenantRecords.objects.create(
+                        tenant=self.user,
+                        property=self.address,
                         start_date=timezone.now()
                     )
 
