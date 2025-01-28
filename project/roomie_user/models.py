@@ -73,6 +73,21 @@ class CustomUser(models.Model):
                         start_date=timezone.now()
                     )
 
+        else:  # Handle creation of a new CustomUser
+            if self.address:
+                # Add new address to address history for new user
+                AddressHistory.objects.create(
+                    user=self, 
+                    address=self.address, 
+                    start_date=timezone.now()
+                )
+                # Record the new tenant history when a user is assigned to a new property
+                PropertyTenantRecords.objects.create(
+                    tenant=self.user,
+                    property=self.address,
+                    start_date=timezone.now()
+                )
+
         # Populate fields from User model if CustomUser is being created or updated
         if not self.first_name and self.user:
             self.first_name = self.user.first_name or 'Default First Name'
@@ -98,3 +113,4 @@ class CustomUser(models.Model):
             self.user_rating_in_app = 5.0  # Default value if not set
 
         super().save(*args, **kwargs)
+

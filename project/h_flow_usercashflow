@@ -1,0 +1,26 @@
+                         List of relations
+ Schema |                 Name                  | Type  |  Owner   
+--------+---------------------------------------+-------+----------
+ public | auth_group                            | table | avnadmin
+ public | auth_group_permissions                | table | avnadmin
+ public | auth_permission                       | table | avnadmin
+ public | auth_user                             | table | avnadmin
+ public | auth_user_groups                      | table | avnadmin
+ public | auth_user_user_permissions            | table | avnadmin
+ public | cash_flow_propertycashflow            | table | avnadmin
+ public | cash_flow_propertypayments            | table | avnadmin
+ public | cash_flow_rentpayment                 | table | avnadmin
+ public | cash_flow_tenantbilling               | table | avnadmin
+ public | cash_flow_usercashflow                | table | avnadmin
+ public | django_admin_log                      | table | avnadmin
+ public | django_content_type                   | table | avnadmin
+ public | django_migrations                     | table | avnadmin
+ public | django_session                        | table | avnadmin
+ public | roomie_property_property              | table | avnadmin
+ public | roomie_property_propertytenantrecords | table | avnadmin
+ public | roomie_property_tenanthistory         | table | avnadmin
+ public | roomie_table                          | table | avnadmin
+ public | roomie_user_addresshistory            | table | avnadmin
+ public | roomie_user_customuser                | table | avnadmin
+(21 rows)
+
