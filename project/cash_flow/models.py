@@ -18,7 +18,7 @@ class UserCashFlow(models.Model):
         ('paid', 'Paid'),
         ('pending', 'Pending'),
     ]
-
+    
     user = models.ForeignKey(User, related_name='cash_flow', on_delete=models.CASCADE)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     date = models.DateField(default=timezone.now)
@@ -27,6 +27,8 @@ class UserCashFlow(models.Model):
     status = models.CharField(max_length=50, choices=STATUS_CHOICES, default='pending')
     deadline = models.DateField(null=True, blank=True)
     to_pay_order = models.BooleanField(default=False)
+    property_billing = models.ForeignKey('PropertyBilling', related_name='user_cash_flows', on_delete=models.CASCADE, null=True, blank=True)
+    tenant_billing = models.ForeignKey('TenantBilling', related_name='user_cash_flows', on_delete=models.CASCADE, null=True, blank=True)
 
     def __str__(self):
         return f"{self.user.username} - {self.category} - {self.amount} ({self.date})"
@@ -88,47 +90,59 @@ class UserCashFlow(models.Model):
                         logger.info(f"Updated TenantBilling status to 'paid' for TenantBilling ID: {tenant_billing.id}")
             
         if self.status == 'paid':
-                # Fetch the PropertyBilling entries associated with this user and category
+                all_property_billings_paid = False
                 property_billings = PropertyBilling.objects.filter(
                     tenant=self.user,
                     property_payment__category=self.category,  # Match the category from PropertyPayment
                     status='pending'
                 )
-
+                property_billings.update(status='paid')
+                
+                logger.info(f"Updated status to 'paid' for UserCashFlow instance: {self.user.username} - {self.category} - {self.amount}")
                 # Log the count of PropertyBilling entries found
                 property_billing_count = property_billings.count()
                 logger.info(f"Checking PropertyBilling for User: {self.user.username} - Found {property_billing_count} pending Property Billings.")
 
                 if property_billing_count == 0:
                     logger.warning(f"No pending PropertyBilling entries found for User: {self.user.username} in category: {self.category}.")
-                    return  # Exit if no PropertyBilling entries are found
+                  
+                    logger.warning(f"BEFORe: {all_property_billings_paid} ")
+                    all_property_billings_paid = True
+                    logger.warning(f"AFTER: {all_property_billings_paid}")
+                    
 
-                # Initialize a variable to track if all property billings are paid
-                all_property_billings_paid = True
+                all_property_billings = PropertyBilling.objects.filter(
+                    
+                    property_payment__category=self.category,  # Match the category from PropertyPayment
+                    status='pending'
+                )
+                logger.warning(f"all_property_billings {all_property_billings}")
 
-                # Process each PropertyBilling entry
-                for property_billing in property_billings:
-                    # Check if property_payment exists (it might be None if the field is nullable)
-                    if property_billing.property_payment:
-                        logger.info(f"Processing PropertyBilling ID: {property_billing.id} for User: {self.user.username}")
 
-                        # Update the PropertyBilling status to 'paid'
-                        property_billing.status = 'paid'
-                        property_billing.save()
-                        logger.info(f"Updated PropertyBilling ID: {property_billing.id} status to 'paid' for User: {self.user.username}")
-
-                        # Check if any PropertyBilling remains unpaid
-                        if property_billing.status != 'paid':
-                            all_property_billings_paid = False
-                    else:
-                        # Log a warning if property_payment is None
-                        logger.warning(f"PropertyBilling ID: {property_billing.id} has no associated PropertyPayment. Skipping update.")
-
-                # After processing all PropertyBillings, check if all are paid
                 if all_property_billings_paid:
-                    logger.info(f"All PropertyBilling entries for User: {self.user.username} in category: {self.category} have been marked as 'paid'.")
+                    logger.info(f"All PropertyBilling entries for category: {self.category} have been marked as 'paid'.")
+
+                    # Fetch all PropertyPayments that have related PropertyBilling entries
+                    property_payments = PropertyPayments.objects.filter(
+                        property_billings__category=self.category
+                    ).distinct()
+
+                    for property_payment in property_payments:
+                        # Check if all related PropertyBilling entries for this PropertyPayment are paid
+                        all_billings_paid = not property_payment.property_billings.filter(status='pending').exists()
+
+                        if all_billings_paid:
+                            # Update PropertyPayment status to 'paid'
+                            property_payment.status = 'paid'
+                            property_payment.save(update_fields=['status'])
+                            logger.info(f"PropertyPayment ID: {property_payment.id} status updated to 'paid' as all related billings are paid.")
+                        else:
+                            logger.warning(f"Some PropertyBilling entries for PropertyPayment ID: {property_payment.id} remain unpaid.")
                 else:
                     logger.warning(f"Some PropertyBilling entries for User: {self.user.username} in category: {self.category} remain unpaid.")
+
+
+
 
 
     
@@ -207,8 +221,21 @@ class RentPayment(models.Model):
                 user = tenant_record.tenant  # Access the tenant (User instance)
                 if user:
                     # Check if TenantBilling already exists for this RentPayment and tenant
-                    if not TenantBilling.objects.filter(rent_payment=self, tenant=user).exists():
-                        # Create a UserCashFlow entry
+                    tenant_billing = TenantBilling.objects.filter(rent_payment=self, tenant=user).first()
+
+                    if not tenant_billing:
+                        # Create a TenantBilling entry first
+                        tenant_billing = TenantBilling.objects.create(
+                            rent_payment=self,
+                            tenant=user,
+                            amount=split_amount,
+                            status='pending',
+                            deadline=self.deadline or timezone.now().date() + timezone.timedelta(days=30),
+                        )
+
+                        print(f"Tenant Billing created: {tenant_billing}")  # Debugging output
+
+                        # Create a UserCashFlow entry linked to the created TenantBilling
                         UserCashFlow.objects.create(
                             user=user,
                             amount=split_amount,
@@ -217,16 +244,10 @@ class RentPayment(models.Model):
                             category='rent',
                             status='pending',
                             deadline=self.deadline or timezone.now().date() + timezone.timedelta(days=30),
+                            tenant_billing=tenant_billing  # ✅ Now linking UserCashFlow to TenantBilling
                         )
 
-                        # Create a TenantBilling entry for each tenant if it doesn't exist
-                        TenantBilling.objects.create(
-                            rent_payment=self,
-                            tenant=user,
-                            amount=split_amount,
-                            status='pending',
-                            deadline=self.deadline or timezone.now().date() + timezone.timedelta(days=30),
-                        )
+                        
 
     def update_status_if_paid(self):
         """Update the RentPayment status to 'paid' if all tenants have paid."""
@@ -275,7 +296,8 @@ class PropertyPayments(models.Model):
 
     def __str__(self):
         return f"Payment for {self.property.id} - {self.category} - {self.amount} ({self.date})"
-
+    
+    
     def save(self, *args, **kwargs):
         """Automatically calculate and split payments among tenants, create UserCashFlow, PropertyBilling, and PropertyPayments if needed."""
         is_new_instance = self.pk is None
@@ -299,15 +321,29 @@ class PropertyPayments(models.Model):
                         date=self.date,
                         description=self.description,
                         status='pending',
-                        deadline=self.deadline or timezone.now().date() + timezone.timedelta(days=30)
+                        deadline=self.deadline or timezone.now().date() + timezone.timedelta(days=30),
+                        
                     )
 
-                # Create UserCashFlow and PropertyBilling entries for each tenant
                 for tenant_record in current_tenants:
                     tenant = tenant_record.tenant
                     if tenant:
+                        property_billing = PropertyBilling.objects.filter(property_payment=property_payment, tenant=tenant).first()
+
                         # Check if PropertyBilling already exists for this PropertyPayments and tenant
-                        if not PropertyBilling.objects.filter(property_payment=property_payment, tenant=tenant).exists():
+                        if not property_billing:
+                            # Create a PropertyBilling entry for the tenant with the category
+                            property_billing = PropertyBilling.objects.create(  # ✅ Store the created object in a variable
+                                property_payment=property_payment,
+                                tenant=tenant,
+                                amount=split_amount,
+                                status='pending',
+                                deadline=self.deadline or timezone.now().date() + timezone.timedelta(days=30),
+                                category=self.category  # Set the category from PropertyPayments
+                            )
+
+                            print(f"Property Billing for tenant {tenant}: {property_billing}")  # ✅ Now it won't be None
+
                             # Create a UserCashFlow entry
                             UserCashFlow.objects.create(
                                 user=tenant,
@@ -317,18 +353,9 @@ class PropertyPayments(models.Model):
                                 category=self.category,
                                 status='pending',
                                 deadline=self.deadline or timezone.now().date() + timezone.timedelta(days=30),
+                                property_billing=property_billing  # ✅ Now it references the correct PropertyBilling instance
                             )
 
-                            # Create a PropertyBilling entry for the tenant with the category
-                            PropertyBilling.objects.create(
-                                property_payment=property_payment,
-                                tenant=tenant,
-                                amount=split_amount,
-                                status='pending',
-                                deadline=self.deadline or timezone.now().date() + timezone.timedelta(days=30),
-                                category=self.category  # Set the category from PropertyPayments
-                            )
-                
 
     def update_status_if_paid(self):
         """Update the PropertyPayments status to 'paid' if all related PropertyBilling entries are marked as 'paid'."""
@@ -339,6 +366,7 @@ class PropertyPayments(models.Model):
             self.save(update_fields=['status'])
 
 class PropertyBilling(models.Model):
+    
     property_payment = models.ForeignKey(PropertyPayments, related_name='property_billings', on_delete=models.CASCADE, null=True, blank=True)
     tenant = models.ForeignKey(User, related_name='tenant_bills', on_delete=models.CASCADE)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
@@ -346,6 +374,10 @@ class PropertyBilling(models.Model):
     deadline = models.DateField(null=True, blank=True)
     category = models.CharField(max_length=50, choices=PropertyPayments.PROPERTY_PAYMENT_CHOICES, default='electricity')
     
+    
+    
     def __str__(self):
         return f"Billing for {self.tenant.username} - {self.amount} ({self.status}) - Category: {self.category}"
+    
+
 

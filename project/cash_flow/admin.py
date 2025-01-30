@@ -153,7 +153,7 @@ class PropertyBillingInline(admin.TabularInline):  # Or admin.StackedInline for 
     extra = 0  # Number of empty forms to display by default
     fields = ['tenant', 'amount', 'status', 'deadline', 'category']  # You can adjust the fields as needed
     readonly_fields = ['tenant', 'amount', 'status', 'deadline', 'category']
-
+   
 
     def save_model(self, request, obj, form, change):
         """Custom save logic for PropertyCashFlow."""
@@ -164,6 +164,9 @@ class PropertyPaymentsAdmin(admin.ModelAdmin):
     list_filter = ('category', 'status', 'property')
     search_fields = ('property__name', 'category',)
     inlines = [PropertyBillingInline]  # Add PropertyBilling as an inline
+    
+    
+    
     def get_property_owner(self, obj):
             """Custom method to display the property owner in the admin list view."""
             if obj.property and hasattr(obj.property, 'owner'):
