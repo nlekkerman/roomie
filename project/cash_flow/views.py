@@ -1,66 +1,100 @@
 from rest_framework import viewsets
-from rest_framework.decorators import action
 from rest_framework.response import Response
-from .models import UserCashFlow, PropertyCashFlow, RentPayment, TenantBilling
-from .serializers import UserCashFlowSerializer, PropertyCashFlowSerializer, RentPaymentSerializer, TenantBillingSerializer
 from django.contrib.auth.models import User
-from roomie_property.models import Property
+from .models import RentPayment, PropertyPayments, UserCashFlow, PropertyCashFlow
+from .serializers import (
+    RentPaymentSerializer, 
+    PropertyPaymentsSerializer, 
+    UserCashFlowSerializer, 
+    PropertyCashFlowSerializer,
+    UserSerializer
+)
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.authentication import TokenAuthentication
+from django.views.decorators.csrf import csrf_exempt
+from django.utils.decorators import method_decorator
+
+class RentPaymentViewSet(viewsets.ModelViewSet):
+    """ViewSet for managing Rent Payments with optional filters for status and property"""
+
+    queryset = RentPayment.objects.all()
+    serializer_class = RentPaymentSerializer
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+
+        # Get the status and property filters from the request query parameters
+        status_filter = self.request.query_params.get('status', None)
+        property_filter = self.request.query_params.get('property', None)
+
+        # Filter by status if provided
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+
+        # Filter by property if provided
+        if property_filter:
+            queryset = queryset.filter(property__id=property_filter)  # Filtering based on property ID
+
+        return queryset
+
+
+class PropertyPaymentsViewSet(viewsets.ModelViewSet):
+    """ViewSet for managing Property Payments with embedded Property Billings"""
+    queryset = PropertyPayments.objects.all().prefetch_related('property_billings')
+    serializer_class = PropertyPaymentsSerializer
 
 class UserCashFlowViewSet(viewsets.ModelViewSet):
     queryset = UserCashFlow.objects.all()
     serializer_class = UserCashFlowSerializer
-
-    @action(detail=False, methods=['get'], url_path='user/(?P<user_id>\d+)/cash_flow')
-    def get_user_cash_flow(self, request, user_id=None):
-        # Filter by user ID and status (optional)
-        status = request.query_params.get('status', None)
-        if status:
-            user_cash_flows = UserCashFlow.objects.filter(user__id=user_id, status=status)
-        else:
-            user_cash_flows = UserCashFlow.objects.filter(user__id=user_id)
-        serializer = self.get_serializer(user_cash_flows, many=True)
-        return Response(serializer.data)
-
-
+    
+    
 class PropertyCashFlowViewSet(viewsets.ModelViewSet):
+    """ViewSet for managing Property Cash Flow"""
     queryset = PropertyCashFlow.objects.all()
     serializer_class = PropertyCashFlowSerializer
 
-    @action(detail=False, methods=['get'], url_path='property/(?P<property_id>\d+)/cash_flow')
-    def get_property_cash_flow(self, request, property_id=None):
-        # Filter by property ID and status (paid or pending)
-        status = request.query_params.get('status', None)
-        if status:
-            property_cash_flows = PropertyCashFlow.objects.filter(property__id=property_id, status=status)
-        else:
-            property_cash_flows = PropertyCashFlow.objects.filter(property__id=property_id)
-        serializer = self.get_serializer(property_cash_flows, many=True)
+class UsersInPaymentsViewSet(viewsets.ViewSet):
+    """ViewSet to retrieve all users involved in Rent or Property Payments"""
+
+    def list(self, request):
+        # Get all unique users involved in Rent and Property Payments
+        rent_users = User.objects.filter(tenant_bills__isnull=False).distinct()
+        property_users = User.objects.filter(property_billing__isnull=False).distinct()
+
+        # Combine querysets and ensure uniqueness
+        all_users = rent_users.union(property_users)
+
+        serializer = UserSerializer(all_users, many=True)
         return Response(serializer.data)
 
+    def retrieve(self, request, pk=None):
+        """Retrieve a specific user and their associated payments, with optional filters for status or category"""
+        try:
+            user = User.objects.get(pk=pk)
+        except User.DoesNotExist:
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
 
-class RentPaymentViewSet(viewsets.ModelViewSet):
-    queryset = RentPayment.objects.all()
-    serializer_class = RentPaymentSerializer
+        # Get query parameters for filtering by status or category
+        status_filter = request.query_params.get('status', None)
+        category_filter = request.query_params.get('category', None)
 
-    @action(detail=False, methods=['get'], url_path='property/(?P<property_id>\d+)/rent_payments')
-    def get_property_rent_payments(self, request, property_id=None):
-        # Filter by property ID and status (paid or pending)
-        status = request.query_params.get('status', None)
-        if status:
-            rent_payments = RentPayment.objects.filter(property__id=property_id, status=status)
-        else:
-            rent_payments = RentPayment.objects.filter(property__id=property_id)
-        serializer = self.get_serializer(rent_payments, many=True)
-        return Response(serializer.data)
+        # Fetch Rent Payments for this user with optional status filter
+        rent_payments = RentPayment.objects.filter(tenant_billings__tenant=user)
+        if status_filter:
+            rent_payments = rent_payments.filter(status=status_filter)
 
+        # Fetch Property Payments for this user with optional filters
+        property_payments = PropertyPayments.objects.filter(property_billings__tenant=user)
+        if status_filter:
+            property_payments = property_payments.filter(status=status_filter)
+        if category_filter:
+            property_payments = property_payments.filter(category=category_filter)
 
-class TenantBillingViewSet(viewsets.ModelViewSet):
-    queryset = TenantBilling.objects.all()
-    serializer_class = TenantBillingSerializer
+        # Combine data
+        payment_data = {
+            "user": UserSerializer(user).data,
+            "rent_payments": rent_payments.values('id', 'date', 'amount', 'status'),
+            "property_payments": property_payments.values('id', 'date', 'category', 'amount', 'status')
+        }
 
-    @action(detail=False, methods=['get'], url_path='rent_payment/(?P<rent_payment_id>\d+)/tenant_billings')
-    def get_tenant_billings_for_rent_payment(self, request, rent_payment_id=None):
-        # Filter by rent payment ID
-        tenant_billings = TenantBilling.objects.filter(rent_payment__id=rent_payment_id)
-        serializer = self.get_serializer(tenant_billings, many=True)
-        return Response(serializer.data)
+        return Response(payment_data)

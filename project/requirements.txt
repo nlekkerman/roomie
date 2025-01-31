@@ -3,6 +3,7 @@ cloudinary==1.42.1
 dj-database-url==2.3.0
 Django==5.1.5
 django-cloudinary-storage==0.3.0
+django-cors-headers==4.6.0
 djangorestframework==3.15.2
 psycopg2==2.9.10
 python-decouple==3.8

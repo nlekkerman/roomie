@@ -141,11 +141,6 @@ class UserCashFlow(models.Model):
                 else:
                     logger.warning(f"Some PropertyBilling entries for User: {self.user.username} in category: {self.category} remain unpaid.")
 
-
-
-
-
-    
     @property
     def first_name(self):
         return self.user.first_name
@@ -231,6 +226,7 @@ class RentPayment(models.Model):
                             amount=split_amount,
                             status='pending',
                             deadline=self.deadline or timezone.now().date() + timezone.timedelta(days=30),
+                            category='rent'
                         )
 
                         print(f"Tenant Billing created: {tenant_billing}")  # Debugging output
@@ -269,6 +265,7 @@ class TenantBilling(models.Model):
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     status = models.CharField(max_length=50, choices=[('paid', 'Paid'), ('pending', 'Pending')])
     deadline = models.DateField()
+    category = models.CharField(max_length=50, default='rent')
 
     def __str__(self):
         return f"Tenant {self.tenant.username} - {self.amount} ({self.status})"
@@ -368,7 +365,7 @@ class PropertyPayments(models.Model):
 class PropertyBilling(models.Model):
     
     property_payment = models.ForeignKey(PropertyPayments, related_name='property_billings', on_delete=models.CASCADE, null=True, blank=True)
-    tenant = models.ForeignKey(User, related_name='tenant_bills', on_delete=models.CASCADE)
+    tenant = models.ForeignKey(User, related_name='property_billing', on_delete=models.CASCADE)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     status = models.CharField(max_length=50, choices=[('paid', 'Paid'), ('pending', 'Pending')], default='pending')
     deadline = models.DateField(null=True, blank=True)

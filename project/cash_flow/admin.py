@@ -22,7 +22,7 @@ class RentPaymentForm(forms.ModelForm):
 class TenantBillingInline(admin.TabularInline):
     model = TenantBilling
     extra = 0  # No empty forms by default
-    readonly_fields = ('tenant', 'amount', 'status', 'deadline')
+    readonly_fields = ('tenant', 'amount', 'status', 'deadline','category')
     can_delete = False  # Disable deleting tenant billing records
     verbose_name = "Billed Tenant"
     verbose_name_plural = "Billed Tenants"
