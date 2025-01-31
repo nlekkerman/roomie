@@ -35,7 +35,7 @@ DATABASES = {
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['8000-nlekkerman-roomie-9vxufbf7skz.ws-eu117.gitpod.io']
+ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '127.0.0.1').split(',')
 
 CSRF_TRUSTED_ORIGINS = [
     'https://*.gitpod.io',
