@@ -40,7 +40,10 @@ ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '127.0.0.1').split(',')
 CSRF_TRUSTED_ORIGINS = [
     'https://*.gitpod.io',
     'https://*.herokuapp.com',
-    'https://8000-nlekkerman-roomie-9vxufbf7skz.ws-eu117.gitpod.io'
+    "http://localhost:5173",
+    'https://8000-nlekkerman-roomie-9vxufbf7skz.ws-eu117.gitpod.io',
+  
+    
 ]
 
 # Application definition
@@ -55,15 +58,18 @@ INSTALLED_APPS = [
     'cloudinary',                   
     'cloudinary_storage', 
     'rest_framework',
+    'rest_framework.authtoken',
     'roomie_property',
     'roomie_user',
     'cash_flow',
+    'corsheaders',
    
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'corsheaders.middleware.CorsMiddleware',  # ✅ Must be ABOVE CSRF
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -95,12 +101,6 @@ WSGI_APPLICATION = 'project.wsgi.application'
 CLOUDINARY_URL = os.getenv('CLOUDINARY_URL')
 DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
 
-REST_FRAMEWORK = {
-    'DEFAULT_RENDERER_CLASSES': [
-        'rest_framework.renderers.JSONRenderer',
-        'rest_framework.renderers.BrowsableAPIRenderer',
-    ],
-}
 
 
 # Password validation
@@ -171,4 +171,33 @@ LOGGING = {
             'propagate': False,
         },
     },
+}
+CORS_ALLOW_ALL_ORIGINS = True  # Allow all origins (for development)
+CORS_ALLOW_CREDENTIALS = True  # Allow sending credentials (cookies, authentication)
+CORS_ALLOW_METHODS = [  # Ensure OPTIONS is allowed
+    "GET",
+    "POST",
+    "PUT",
+    "DELETE",
+    "OPTIONS",
+]
+
+CORS_ALLOW_HEADERS = [
+    "content-type",
+    "x-csrftoken",
+    "authorization",
+]
+REST_FRAMEWORK = {
+    'DEFAULT_RENDERER_CLASSES': [
+        'rest_framework.renderers.JSONRenderer',
+        'rest_framework.renderers.BrowsableAPIRenderer',
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.AllowAny',  # Allow any user to access OPTIONS requests (for now)
+    ],
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.SessionAuthentication',
+        'rest_framework.authentication.BasicAuthentication',
+        'rest_framework.authentication.TokenAuthentication',  # Ensure Token Authentication is included
+    ],
 }
