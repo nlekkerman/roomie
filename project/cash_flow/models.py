@@ -149,6 +149,7 @@ class UserCashFlow(models.Model):
     def last_name(self):
         return self.user.last_name
 
+
 class PropertyCashFlow(models.Model):
     CATEGORY_CHOICES = [
         ('electricity', 'Electricity'),

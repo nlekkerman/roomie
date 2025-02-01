@@ -14,7 +14,7 @@ from pathlib import Path
 import os
 import dj_database_url
 from decouple import config, Csv
-
+from datetime import timedelta
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -41,8 +41,7 @@ CSRF_TRUSTED_ORIGINS = [
     'https://*.gitpod.io',
     'https://*.herokuapp.com',
     "http://localhost:5173",
-    'https://8000-nlekkerman-roomie-9vxufbf7skz.ws-eu117.gitpod.io',
-  
+    
     
 ]
 
@@ -55,14 +54,16 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'cloudinary',                   
-    'cloudinary_storage', 
+    'cloudinary',
+    'cloudinary_storage',
     'rest_framework',
     'rest_framework.authtoken',
+    'rest_framework_simplejwt',
     'roomie_property',
     'roomie_user',
     'cash_flow',
     'corsheaders',
+    'accounts_app',
    
 ]
 
@@ -150,24 +151,34 @@ LOGGING = {
     'disable_existing_loggers': False,
     'handlers': {
         'console': {
-            'level': 'INFO',
+            'level': 'ERROR',  # Change INFO -> DEBUG for detailed logs
             'class': 'logging.StreamHandler',
         },
         'file': {
-            'level': 'INFO',
+            'level': 'DEBUG',  # Change INFO -> DEBUG to capture everything
             'class': 'logging.FileHandler',
-            'filename': 'user_cash_flow.log',
+            'filename': os.path.join(BASE_DIR, 'debug.log'),  # Save logs to debug.log
         },
     },
     'loggers': {
         'django': {
             'handlers': ['console', 'file'],
-            'level': 'INFO',
+            'level': 'DEBUG',  # Ensure Django logs errors & authentication issues
             'propagate': True,
         },
-        'cash_flow': {  # Ensure your logger is configured here
+        'django.request': {
             'handlers': ['console', 'file'],
-            'level': 'INFO',
+            'level': 'DEBUG',
+            'propagate': False,
+        },
+        'rest_framework': {
+            'handlers': ['console', 'file'],
+            'level': 'DEBUG',  # Logs Django Rest Framework-related issues
+            'propagate': False,
+        },
+        'roomie_user': {  # Use this instead of 'cash_flow' for your app logs
+            'handlers': ['console', 'file'],
+            'level': 'DEBUG',
             'propagate': False,
         },
     },
@@ -180,6 +191,7 @@ CORS_ALLOW_METHODS = [  # Ensure OPTIONS is allowed
     "PUT",
     "DELETE",
     "OPTIONS",
+    "PATCH",
 ]
 
 CORS_ALLOW_HEADERS = [
@@ -188,6 +200,7 @@ CORS_ALLOW_HEADERS = [
     "authorization",
 ]
 REST_FRAMEWORK = {
+    
     'DEFAULT_RENDERER_CLASSES': [
         'rest_framework.renderers.JSONRenderer',
         'rest_framework.renderers.BrowsableAPIRenderer',
@@ -198,6 +211,13 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework.authentication.SessionAuthentication',
         'rest_framework.authentication.BasicAuthentication',
-        'rest_framework.authentication.TokenAuthentication',  # Ensure Token Authentication is included
+        'rest_framework.authentication.TokenAuthentication',
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
     ],
+}
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30),  # Shorter lifetime for the access token (e.g., 30 minutes)
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),  # Longer lifetime for the refresh token (e.g., 1 day)
+    'ROTATE_REFRESH_TOKENS': True,  # Ensure refresh token rotation (get a new refresh token on every use)
+    'BLACKLIST_AFTER_ROTATION': True,  # Blacklist the old refresh token after it is rotated
 }

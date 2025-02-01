@@ -1,4 +1,6 @@
 from rest_framework import viewsets
+from rest_framework import filters
+from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.response import Response
 from django.contrib.auth.models import User
 from .models import RentPayment, PropertyPayments, UserCashFlow, PropertyCashFlow
@@ -11,6 +13,8 @@ from .serializers import (
 )
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.authentication import TokenAuthentication
+from rest_framework.decorators import action
+from rest_framework import status
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 
@@ -44,10 +48,28 @@ class PropertyPaymentsViewSet(viewsets.ModelViewSet):
     serializer_class = PropertyPaymentsSerializer
 
 class UserCashFlowViewSet(viewsets.ModelViewSet):
-    queryset = UserCashFlow.objects.all()
     serializer_class = UserCashFlowSerializer
-    
-    
+    filter_backends = (DjangoFilterBackend, filters.OrderingFilter)
+    filterset_fields = ['category', 'status']  # Allow filtering by category and status
+    ordering_fields = ['date']  # You can also allow ordering by date, for example
+
+    def get_queryset(self):
+        """
+        This method will return only the cash flows for the currently authenticated user.
+        It also applies any filtering for category and status.
+        """
+        user = self.request.user  # Get the current authenticated user
+        return UserCashFlow.objects.filter(user=user)  # Filter cash flows by the user
+
+    @action(detail=True, methods=['patch'], url_path='mark_to_pay_order')
+    def mark_to_pay_order(self, request, pk=None):
+        try:
+            cash_flow = self.get_object()  # Gets the object with the given pk (id)
+            cash_flow.to_pay_order = not cash_flow.to_pay_order  # Toggle the value
+            cash_flow.save()
+            return Response({'message': 'Cash flow updated successfully.'}, status=status.HTTP_200_OK)
+        except UserCashFlow.DoesNotExist:
+            return Response({'error': 'Cash flow not found'}, status=status.HTTP_404_NOT_FOUND)
 class PropertyCashFlowViewSet(viewsets.ModelViewSet):
     """ViewSet for managing Property Cash Flow"""
     queryset = PropertyCashFlow.objects.all()

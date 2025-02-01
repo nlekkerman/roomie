@@ -37,7 +37,11 @@ class Property(models.Model):
     def full_address(self):
         """Returns the full address as a string."""
         return f"{self.house_number} {self.street}, {self.town}, {self.county}, {self.country}"
-
+    
+    def all_current_tenant(self):
+        """Fetch all current tenants."""
+        return self.tenant_history.filter(end_date__isnull=True)
+    
     def current_tenant(self):
         """Fetch the current tenant."""
         return self.tenant_history.filter(end_date__isnull=True).first()
