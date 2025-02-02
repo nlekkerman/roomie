@@ -206,7 +206,7 @@ REST_FRAMEWORK = {
         'rest_framework.renderers.BrowsableAPIRenderer',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.AllowAny',  # Allow any user to access OPTIONS requests (for now)
+        'rest_framework.permissions.AllowAny',
     ],
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework.authentication.SessionAuthentication',
@@ -216,7 +216,7 @@ REST_FRAMEWORK = {
     ],
 }
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30),  # Shorter lifetime for the access token (e.g., 30 minutes)
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=230),  # Shorter lifetime for the access token (e.g., 30 minutes)
     'REFRESH_TOKEN_LIFETIME': timedelta(days=1),  # Longer lifetime for the refresh token (e.g., 1 day)
     'ROTATE_REFRESH_TOKENS': True,  # Ensure refresh token rotation (get a new refresh token on every use)
     'BLACKLIST_AFTER_ROTATION': True,  # Blacklist the old refresh token after it is rotated

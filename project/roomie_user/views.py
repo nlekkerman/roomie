@@ -58,7 +58,7 @@ class CustomUserProfileView(APIView):
                 "last_name": custom_user.last_name,
                 "email": custom_user.email,
                 "has_address": custom_user.has_address,
-                "current_address": current_address.address.full_address() if current_address else None,
+                "current_address": current_address.address.full_address() if current_address and current_address.address else None,
                 "address_history": [
                     {
                         "address": history.address.full_address() if history.address else None,
@@ -71,5 +71,3 @@ class CustomUserProfileView(APIView):
             return Response(response_data)
         except CustomUser.DoesNotExist:
             return Response({"detail": "Profile not found."}, status=404)
-
-

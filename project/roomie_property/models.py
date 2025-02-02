@@ -4,6 +4,7 @@ from django.db import models
 from django.db import models
 from django.contrib.auth.models import User
 from django.utils.timezone import now
+from cloudinary.models import CloudinaryField
 
 class PropertyTenantRecords(models.Model):
     property = models.ForeignKey('Property', related_name='tenant_history', on_delete=models.CASCADE)
@@ -13,6 +14,7 @@ class PropertyTenantRecords(models.Model):
 
     def __str__(self):
         return f"{self.tenant.username} ({self.start_date} - {self.end_date or 'Present'})"
+
 
 class Property(models.Model):
     # Address-related fields
@@ -27,9 +29,16 @@ class Property(models.Model):
     room_capacity = models.PositiveIntegerField()
     people_capacity = models.PositiveIntegerField()
     rent_amount = models.DecimalField(max_digits=10, decimal_places=2, null=True)
+    deposit_amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, default=0.00)
 
     owner = models.ForeignKey(User, related_name='owned_properties', on_delete=models.CASCADE)
     property_supervisor = models.ForeignKey(User, related_name='supervised_properties', on_delete=models.SET_NULL, null=True, blank=True)
+
+    # Main property image
+    main_image = CloudinaryField('main_image', null=True, blank=True)
+
+    # Additional room images
+    additional_images = models.ManyToManyField('RoomImage', related_name='properties', blank=True)
 
     def __str__(self):
         return f"Property {self.house_number} {self.street}, {self.town}, {self.county}, {self.country}"
@@ -58,3 +67,13 @@ class Property(models.Model):
             tenant=tenant,
             start_date=start_date or now().date()
         )
+
+class RoomImage(models.Model):
+    # Foreign key to Property
+    property = models.ForeignKey(Property, related_name='room_images', on_delete=models.CASCADE)
+
+    image = CloudinaryField('image')
+    description = models.CharField(max_length=255)
+
+    def __str__(self):
+        return self.description or "No description"
