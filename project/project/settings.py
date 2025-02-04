@@ -64,6 +64,7 @@ INSTALLED_APPS = [
     'cash_flow',
     'corsheaders',
     'accounts_app',
+    'communication',
    
 ]
 
@@ -139,6 +140,8 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.1/howto/static-files/
 
 STATIC_URL = 'static/'
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
@@ -177,6 +180,11 @@ LOGGING = {
             'propagate': False,
         },
         'roomie_user': {  # Use this instead of 'cash_flow' for your app logs
+            'handlers': ['console', 'file'],
+            'level': 'DEBUG',
+            'propagate': False,
+        },
+        'communication': {  # Use this instead of 'cash_flow' for your app logs
             'handlers': ['console', 'file'],
             'level': 'DEBUG',
             'propagate': False,

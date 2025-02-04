@@ -48,28 +48,73 @@ class PropertyPaymentsViewSet(viewsets.ModelViewSet):
     serializer_class = PropertyPaymentsSerializer
 
 class UserCashFlowViewSet(viewsets.ModelViewSet):
-    serializer_class = UserCashFlowSerializer
-    filter_backends = (DjangoFilterBackend, filters.OrderingFilter)
-    filterset_fields = ['category', 'status']  # Allow filtering by category and status
-    ordering_fields = ['date']  # You can also allow ordering by date, for example
+    """ViewSet for managing User Cash Flows with optional filters for category, status, and order to pay"""
 
+    serializer_class = UserCashFlowSerializer
+    permission_classes = [IsAuthenticated]
+    
+    # Use filtering and ordering
+    filter_backends = (DjangoFilterBackend, filters.OrderingFilter)
+    filterset_fields = ['category', 'status']  # Filter by category and status
+    ordering_fields = ['date']  # Allow ordering by date
+    
     def get_queryset(self):
         """
-        This method will return only the cash flows for the currently authenticated user.
-        It also applies any filtering for category and status.
+        Return only the cash flows for the authenticated user, with optional filtering and ordering.
         """
-        user = self.request.user  # Get the current authenticated user
-        return UserCashFlow.objects.filter(user=user)  # Filter cash flows by the user
+        user = self.request.user  # Get the authenticated user
+        queryset = UserCashFlow.objects.filter(user=user)
+
+        # Apply filters (category and status)
+        category_filter = self.request.query_params.get('category', None)
+        if category_filter:
+            queryset = queryset.filter(category=category_filter)
+
+        status_filter = self.request.query_params.get('status', None)
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+
+        return queryset
 
     @action(detail=True, methods=['patch'], url_path='mark_to_pay_order')
     def mark_to_pay_order(self, request, pk=None):
+        """
+        Toggle the 'to_pay_order' field for the specific cash flow (identified by pk).
+        """
         try:
-            cash_flow = self.get_object()  # Gets the object with the given pk (id)
-            cash_flow.to_pay_order = not cash_flow.to_pay_order  # Toggle the value
-            cash_flow.save()
+            cash_flow = self.get_object()  # Fetch the object by its primary key (pk)
+            cash_flow.to_pay_order = not cash_flow.to_pay_order  # Toggle the order flag
+            cash_flow.save()  # Save the updated cash flow
             return Response({'message': 'Cash flow updated successfully.'}, status=status.HTTP_200_OK)
         except UserCashFlow.DoesNotExist:
-            return Response({'error': 'Cash flow not found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'error': 'Cash flow not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    @action(detail=False, methods=['get'], url_path='filter-by-category')
+    def filter_by_category(self, request):
+        """
+        Filter cash flows by category.
+        """
+        category = request.query_params.get('category', None)
+        if not category:
+            return Response({"detail": "Category filter is required."}, status=400)
+
+        cash_flows = self.get_queryset().filter(category=category)
+        serializer = self.get_serializer(cash_flows, many=True)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['get'], url_path='filter-by-status')
+    def filter_by_status(self, request):
+        """
+        Filter cash flows by status.
+        """
+        status = request.query_params.get('status', None)
+        if not status:
+            return Response({"detail": "Status filter is required."}, status=400)
+
+        cash_flows = self.get_queryset().filter(status=status)
+        serializer = self.get_serializer(cash_flows, many=True)
+        return Response(serializer.data)
+    
 class PropertyCashFlowViewSet(viewsets.ModelViewSet):
     """ViewSet for managing Property Cash Flow"""
     queryset = PropertyCashFlow.objects.all()

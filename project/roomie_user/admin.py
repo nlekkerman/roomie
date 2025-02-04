@@ -40,14 +40,14 @@ class AddressHistoryInline(admin.TabularInline):
 
 # Custom User Admin
 class CustomUserAdmin(admin.ModelAdmin):
-    list_display = ('user', 'address', 'first_name', 'last_name', 'phone_number', 'user_rating_in_app', 'has_address')
+    list_display = ('user', 'address', 'first_name', 'last_name', 'phone_number', 'user_rating_in_app', 'has_address','profile_image')
     search_fields = ('user__username', 'first_name', 'last_name', 'email')
     list_filter = ('has_address', 'user_rating_in_app')
     ordering = ('user__username',)
 
     fieldsets = (
         (None, {
-            'fields': ('user', 'first_name', 'last_name', 'email', 'phone_number', 'user_rating_in_app', 'address', 'has_address')
+            'fields': ('user', 'first_name', 'last_name', 'email', 'phone_number', 'user_rating_in_app', 'address', 'has_address','profile_image')
         }),
     )
 
