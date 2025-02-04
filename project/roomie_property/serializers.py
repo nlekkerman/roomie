@@ -34,3 +34,13 @@ class PropertySerializer(serializers.ModelSerializer):
                   'rent_amount', 'property_supervisor', 'property_supervisor_name', 
                   'main_image', 'room_images',  # ✅ Include images
                   'current_tenant', 'tenant_history', 'all_current_tenant']
+class OwnerPropertiesSerializer(serializers.ModelSerializer):
+    # This serializer returns properties owned by the user
+    class Meta:
+        model = Property
+        fields = ['id', 'street', 'house_number', 'town', 'county', 'country', 'property_rating', 'rent_amount', 'deposit_amount', 'main_image']
+    owned_properties = PropertySerializer(many=True, read_only=True)
+
+    class Meta:
+        model = User  # The owner is a User
+        fields = ['id', 'username', 'owned_properties']
