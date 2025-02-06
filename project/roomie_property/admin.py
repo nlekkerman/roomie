@@ -13,15 +13,17 @@ class RoomImageInline(admin.TabularInline):
     extra = 1  # Number of empty forms initially
 
 class PropertyAdmin(admin.ModelAdmin):
-    list_display = ('full_address_display', 'main_image_display','owner',
+    list_display = ('full_address_display','air_code', 'description', 'main_image_display', 'owner', 'folio_number',
                     'property_rating', 'room_capacity', 'people_capacity', 
                     'property_supervisor', 'rent_amount', 'deposit_amount', 'current_tenants_display')
     
     search_fields = ('street', 'town', 'county', 'country', 
                      'owner__username', 'property_supervisor__username')
 
-    inlines = [RoomImageInline,PropertyTenantHistoryInline]  # Add the inline for room images
-
+    inlines = [RoomImageInline, PropertyTenantHistoryInline]  # Add the inline for room images
+    
+    
+    
     # 🔹 **Display full address**
     def full_address_display(self, obj):
         return obj.full_address()  # Calls the `full_address()` method from the model
@@ -48,13 +50,13 @@ class PropertyAdmin(admin.ModelAdmin):
         fieldsets = super().get_fieldsets(request, obj)
         if obj:  # If editing an existing Property
             fieldsets[0][1]['fields'] = (
-                'street', 'house_number', 'town', 'county', 'country', 'main_image',
+                'street', 'house_number', 'town', 'county', 'country', 'folio_number', 'main_image',
                 'property_rating', 'room_capacity', 'rent_amount', 'people_capacity', 'deposit_amount',
-                'owner', 'property_supervisor'
+                'owner', 'property_supervisor', 'description'
             )
         else:  # When adding a new Property
             fieldsets[0][1]['fields'] = (
-                'street', 'house_number', 'town', 'county', 'country', 'main_image',
+                'street', 'house_number', 'town', 'county', 'country', 'air_code', 'folio_number', 'description', 'main_image',
                 'property_rating', 'room_capacity', 'people_capacity', 'rent_amount','deposit_amount',
                 'owner', 'property_supervisor'
             )

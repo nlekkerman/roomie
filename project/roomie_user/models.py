@@ -34,7 +34,8 @@ class CustomUser(models.Model):
     email = models.EmailField(blank=True, null=True)
     has_address = models.BooleanField(default=False)
     profile_image = CloudinaryField('image', blank=True, null=True)
-   
+    is_owner = models.BooleanField(default=False)  # New flag to mark ownership
+
     def __str__(self):
         # Access the username of the related User model
        return self.user.email if self.user and self.user.email else "Unknown User"

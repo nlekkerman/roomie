@@ -23,8 +23,9 @@ class Property(models.Model):
     town = models.CharField(max_length=100)
     county = models.CharField(max_length=100)
     country = models.CharField(max_length=100)
-
-    # Property-related fields
+    folio_number = models.CharField(max_length=50, unique=True, null=True, blank=True)
+    air_code = models.CharField(max_length=10, unique=True, null=True, blank=True)
+    description = models.TextField(null=True, blank=True)
     property_rating = models.DecimalField(max_digits=3, decimal_places=1, default=5.0)
     room_capacity = models.PositiveIntegerField()
     people_capacity = models.PositiveIntegerField()
@@ -74,6 +75,6 @@ class RoomImage(models.Model):
 
     image = CloudinaryField('image')
     description = models.CharField(max_length=255)
-
+    
     def __str__(self):
         return self.description or "No description"
