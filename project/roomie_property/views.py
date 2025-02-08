@@ -9,19 +9,54 @@ from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.exceptions import ValidationError
 from rest_framework.decorators import action
+import cloudinary.uploader
 
 
 class PropertyViewSet(viewsets.ModelViewSet):
     queryset = Property.objects.all()
     serializer_class = PropertySerializer
     parser_classes = [MultiPartParser, FormParser]
+    permission_classes = [IsAuthenticated]  # Ensure only authenticated users can create a property
 
+    def create(self, request, *args, **kwargs):
+        
+        try:
+            print(f"Request data received: {request.data}") 
+            # Set the authenticated user as the owner of the new property
+            request.data['owner'] = request.user.id  # The 'owner' field is the User object
+            if 'folio_number' in request.data:
+                print(f"folio_number: {request.data['folio_number']}")
+            # If the request includes images or other fields, they will be handled by the serializer
+            return super().create(request, *args, **kwargs)
+
+        except Exception as e:
+            print(f"Error creating property: {e}")
+            return Response({"error": "An error occurred while creating the property."},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+    
     def partial_update(self, request, *args, **kwargs):
         """Handles PATCH requests for updating images"""
 
         try:
+            
             property_instance = self.get_object()
             
+            if 'delete_image_public_id' in request.data:
+                delete_image_public_id = request.data['delete_image_public_id']
+                print(f"Attempting to delete image with Cloudinary public ID: {delete_image_public_id}")
+
+                # Delete the image from Cloudinary using the public ID
+                cloudinary.uploader.destroy(delete_image_public_id)  # Remove the image from Cloudinary
+                print(f"Deleted image with Cloudinary public ID: {delete_image_public_id}")
+
+                # Delete the image from the database as well
+                room_image = property_instance.room_images.filter(image__contains=delete_image_public_id).first()
+                if room_image:
+                    room_image.delete()
+                    print(f"Deleted image with public ID: {delete_image_public_id} from the database.")
+                else:
+                    print(f"No matching image found in database for public ID {delete_image_public_id}")
             # Handle main image update
             if 'main_image' in request.FILES:
                 property_instance.main_image = request.FILES['main_image']
@@ -70,27 +105,7 @@ class PropertyViewSet(viewsets.ModelViewSet):
             print(f"Error: {e}")
             raise ValidationError("An error occurred while updating the property.")
 
-    @action(detail=True, methods=['patch'])
-    def update_text_fields(self, request, *args, **kwargs):
-        """Handles PATCH requests for updating text fields."""
-        try:
-            property_instance = self.get_object()
-            data = request.data.copy()  # Copy the request data for modification
 
-            # Ensure only text fields are updated
-            text_fields = ['air_code', 'folio_number', 'description', 'property_rating', 
-                           'room_capacity', 'people_capacity', 'deposit_amount', 'rent_amount']
-            text_data = {field: data[field] for field in text_fields if field in data}
-
-            # Use the PropertySerializer to validate and update the instance
-            serializer = self.get_serializer(property_instance, data=text_data, partial=True)
-            serializer.is_valid(raise_exception=True)
-            serializer.save()
-
-            return Response(serializer.data, status=status.HTTP_200_OK)
-        except Exception as e:
-            print(f"Error: {e}")
-            return Response({"detail": "An error occurred while updating the property."}, status=status.HTTP_400_BAD_REQUEST)
 class OwnerDashboardView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -148,18 +163,12 @@ class PropertyCreateView(APIView):
         # Return the property data with the owner info
         return Response(PropertySerializer(property).data, status=status.HTTP_201_CREATED)
     
-from rest_framework import status
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework.exceptions import ValidationError
-from .models import Property
-from .serializers import PropertySerializer
-
 class PropertyUpdateTextFieldsView(APIView):
     """Handles PATCH requests for updating only text fields in a Property."""
 
     def patch(self, request, *args, **kwargs):
         try:
+            print("Incoming Request Data:", request.data)
             # Fetch the property instance based on the provided ID (from the URL)
             property_instance = Property.objects.get(id=kwargs['pk'])  # 'pk' is the property ID in URL
 
@@ -175,11 +184,16 @@ class PropertyUpdateTextFieldsView(APIView):
             if not update_data:
                 return Response({"detail": "No valid fields to update."}, status=status.HTTP_400_BAD_REQUEST)
 
+            if "folio_number" in update_data:
+                print(f"Updating folio_number from {property_instance.folio_number} to {update_data['folio_number']}")
+                property_instance.folio_number = update_data["folio_number"]
+                property_instance.save()  # Explicitly save it
+                print("Manually Updated folio_number:", property_instance.folio_number)
             # Use PropertySerializer to validate the data
             serializer = PropertySerializer(property_instance, data=update_data, partial=True)
             serializer.is_valid(raise_exception=True)  # Raises ValidationError if any fields are invalid
             serializer.save()  # Save the updated property instance
-
+            print("Updated folio_number:", property_instance.folio_number)
             return Response(serializer.data, status=status.HTTP_200_OK)
 
         except Property.DoesNotExist:
@@ -191,3 +205,16 @@ class PropertyUpdateTextFieldsView(APIView):
         except Exception as e:
             print(f"Error: {e}")
             return Response({"detail": "An error occurred while updating the property."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+class RoomImageUploadView(APIView):
+    def post(self, request, *args, **kwargs):
+        # We need to handle both the file and description fields here
+        serializer = RoomImageSerializer(data=request.data)
+        if serializer.is_valid():
+            # Save the image and description into the RoomImage model
+            room_image = serializer.save()
+            return Response({
+                'message': 'Room image uploaded successfully!',
+                'room_image': RoomImageSerializer(room_image).data
+            }, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+

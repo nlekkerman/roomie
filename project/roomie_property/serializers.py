@@ -2,6 +2,8 @@ from rest_framework import serializers
 from .models import Property, PropertyTenantRecords, RoomImage
 from django.contrib.auth.models import User
 
+
+
 class RoomImageSerializer(serializers.ModelSerializer):
     # Prepend the base URL for room images
     image = serializers.SerializerMethodField()
@@ -28,7 +30,7 @@ class PropertySerializer(serializers.ModelSerializer):
 
     property_supervisor_name = serializers.CharField(source='property_supervisor.username', read_only=True)
     owner_username = serializers.CharField(source='owner.username', read_only=True)
-    folio_number = serializers.CharField( read_only=True)
+    folio_number = serializers.CharField(required=False, allow_blank=True, max_length=50)  # This makes folio_number writable and allows blanks
     main_image = serializers.ImageField(required=False, allow_null=True)    
     room_images = RoomImageSerializer(required=False, many=True)
     air_code = serializers.CharField(max_length=10, allow_blank=True, required=False)
@@ -41,6 +43,8 @@ class PropertySerializer(serializers.ModelSerializer):
                   'main_image', 'room_images',
                   'current_tenant', 'tenant_history', 'all_current_tenant', 'folio_number',
                   'air_code', 'description']
+    
+    
     def update(self, instance, validated_data):
         
         # Handle text fields update (air_code, description, etc.)
@@ -66,6 +70,7 @@ class PropertySerializer(serializers.ModelSerializer):
 
         instance.save()
         return instance
+
 class OwnerPropertiesSerializer(serializers.ModelSerializer):
     # This serializer returns properties owned by the user
     class Meta:
