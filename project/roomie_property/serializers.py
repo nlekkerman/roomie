@@ -1,21 +1,33 @@
 from rest_framework import serializers
 from .models import Property, PropertyTenantRecords, RoomImage
 from django.contrib.auth.models import User
-
-
-
 class RoomImageSerializer(serializers.ModelSerializer):
-    # Prepend the base URL for room images
-    image = serializers.SerializerMethodField()
+    image_url = serializers.SerializerMethodField()
 
-    def get_image(self, obj):
-        # Assuming your cloud storage URL is defined in your settings or is consistent
-    
-        return obj.image.url
+    def get_image_url(self, obj):
+        """Construct the full Cloudinary image URL using the stored public ID."""
+        if obj.image:  # Ensure image is not None
+            return f"https://res.cloudinary.com/dg0ssec7u/image/upload/{obj.image}"
+        return None  # Return None if no image exists
 
     class Meta:
         model = RoomImage
-        fields = ['id', 'image', 'description']
+        fields = ['id', 'property', 'image', 'image_url', 'description']  # Include property_id
+
+    def create(self, validated_data):
+        """Ensure property_id is correctly assigned when creating a RoomImage."""
+        property_id = self.context.get("property_id")  # Expect property_id in serializer context
+        
+        if not property_id:
+            raise serializers.ValidationError({"property_id": "This field is required."})
+        
+        try:
+            property_instance = Property.objects.get(id=property_id)
+        except Property.DoesNotExist:
+            raise serializers.ValidationError({"property_id": "Property not found."})
+
+        validated_data['property'] = property_instance  # Assign the correct property
+        return super().create(validated_data)
 class PropertyTenantRecordsSerializer(serializers.ModelSerializer):
     tenant = serializers.StringRelatedField()  # Display tenant username
     

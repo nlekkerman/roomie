@@ -16,7 +16,7 @@ class PropertyViewSet(viewsets.ModelViewSet):
     queryset = Property.objects.all()
     serializer_class = PropertySerializer
     parser_classes = [MultiPartParser, FormParser]
-    permission_classes = [IsAuthenticated]  # Ensure only authenticated users can create a property
+    # Ensure only authenticated users can create a property
 
     def create(self, request, *args, **kwargs):
         
@@ -205,16 +205,60 @@ class PropertyUpdateTextFieldsView(APIView):
         except Exception as e:
             print(f"Error: {e}")
             return Response({"detail": "An error occurred while updating the property."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-class RoomImageUploadView(APIView):
-    def post(self, request, *args, **kwargs):
-        # We need to handle both the file and description fields here
-        serializer = RoomImageSerializer(data=request.data)
-        if serializer.is_valid():
-            # Save the image and description into the RoomImage model
-            room_image = serializer.save()
-            return Response({
-                'message': 'Room image uploaded successfully!',
-                'room_image': RoomImageSerializer(room_image).data
-            }, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+
+
+class RoomImageUploadView(APIView):
+    parser_classes = (MultiPartParser, FormParser)
+
+    def post(self, request, *args, **kwargs):
+        print("🚀 Upload request received...")
+        
+        # Debugging request data
+        print("📝 Full request data:", request.data)
+        print("📂 Uploaded files:", request.FILES)
+
+        property_id = request.data.get('property_id')  # Get property ID from frontend
+        image = request.FILES.get('image')
+        description = request.data.get('description', '')
+
+        # Validate required fields
+        if not property_id:
+            print("❌ Missing property_id in request!")
+            return Response({"error": "Property ID is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not image:
+            print("❌ No image file received!")
+            return Response({"error": "Image file is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Retrieve property instance
+        try:
+            property_instance = Property.objects.get(id=property_id)
+            print(f"✅ Found Property: {property_instance}")
+        except Property.DoesNotExist:
+            print("❌ Property not found with ID:", property_id)
+            return Response({"error": "Property not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        # Upload image to Cloudinary
+        try:
+            print("📡 Uploading image to Cloudinary...")
+            upload_result = cloudinary.uploader.upload(image)
+            print("✅ Cloudinary upload success:", upload_result)
+            image_url = upload_result.get('secure_url')
+            image_public_id = upload_result.get('public_id')
+        except Exception as e:
+            print("❌ Cloudinary upload failed:", str(e))
+            return Response({"error": "Failed to upload image."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        # Save Room Image
+        print("💾 Saving image to database...")
+        room_image = RoomImage.objects.create(
+            property=property_instance,
+            image=image_public_id,  # Store Cloudinary public ID
+            description=description
+        )
+
+        print("✅ Room image saved successfully:", room_image)
+
+        serializer = RoomImageSerializer(room_image)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
