@@ -23,25 +23,47 @@ class CustomUserSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomUser
         fields = [
-            'id', 'user', 'first_name', 'last_name', 'user_rating_in_app', 
+            'user', 'first_name', 'last_name', 'user_rating_in_app', 
             'phone_number', 'address', 'email', 'has_address', 
             'address_history', 'profile_image', 'property_id'
         ]
 
     def create(self, validated_data):
-        """
-        Create a new CustomUser with a profile image.
-        """
-        user_instance = validated_data.pop('user')
+        user_instance = validated_data.pop('user', None)
+
+        if not user_instance:
+            user_instance = self.context.get('request').user
+
+        if not user_instance:
+            raise serializers.ValidationError("User is required")
+
+        if CustomUser.objects.filter(user=user_instance).exists():
+            raise serializers.ValidationError("Custom user profile already exists.")
+
+        # Default values if not provided
+        validated_data.setdefault('first_name', user_instance.first_name)
+        validated_data.setdefault('last_name', user_instance.last_name)
+        validated_data.setdefault('email', user_instance.email)
+        validated_data.setdefault('user_rating_in_app', 5.0)
+
         profile_image = validated_data.pop('profile_image', None)
 
-        custom_user = CustomUser.objects.create(user=user_instance, **validated_data)
+        # Create the CustomUser instance
+        custom_user = CustomUser(**validated_data)
+        custom_user.user = user_instance  
+        custom_user.pk = user_instance.pk
+
+        try:
+            custom_user.save(force_insert=True)
+        except Exception as e:
+            raise serializers.ValidationError(f"Database error: {str(e)}")
+
         if profile_image:
             custom_user.profile_image = profile_image
             custom_user.save()
 
         return custom_user
-    
+
     
     
     def update(self, instance, validated_data):
@@ -64,3 +86,22 @@ class CustomUserSerializer(serializers.ModelSerializer):
         
         instance.save()
         return instance
+    
+    def get_current_address(self, obj):
+        # Fetch the current active address from AddressHistory
+        print(f"Fetching current address for user: {obj.user.username}")
+        current_address = AddressHistory.objects.filter(user=obj, end_date__isnull=True).first()
+        print(f"Found current address: {current_address}")  # This will print None if no address is found
+        if current_address:
+            print(f"Current address: {current_address.address}")
+        return current_address.address if current_address else None
+
+    def get_property_id(self, obj):
+        # Look for the current active address from the AddressHistory table
+        current_address = AddressHistory.objects.filter(user=obj, end_date__isnull=True).first()
+        
+        if current_address and current_address.address:
+            # Assuming AddressHistory has a ForeignKey to Property
+            property = current_address.address.property  # This assumes your Address model has a 'property' field
+            return property.id if property else None
+        return None

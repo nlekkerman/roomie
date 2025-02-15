@@ -1,6 +1,9 @@
 from rest_framework import serializers
-from .models import Property, PropertyTenantRecords, RoomImage
+from .models import Property, PropertyTenantRecords, RoomImage, TenancyRequest
 from django.contrib.auth.models import User
+
+
+
 class RoomImageSerializer(serializers.ModelSerializer):
     image_url = serializers.SerializerMethodField()
 
@@ -28,12 +31,16 @@ class RoomImageSerializer(serializers.ModelSerializer):
 
         validated_data['property'] = property_instance  # Assign the correct property
         return super().create(validated_data)
+
 class PropertyTenantRecordsSerializer(serializers.ModelSerializer):
-    tenant = serializers.StringRelatedField()  # Display tenant username
-    
+    property = serializers.PrimaryKeyRelatedField(queryset=Property.objects.all())  # Assuming Property is related here
+    tenant = serializers.PrimaryKeyRelatedField(queryset=User.objects.all())  # Assuming User model is being used for tenant
+    start_date = serializers.DateField()
+    end_date = serializers.DateField(allow_null=True)
+
     class Meta:
         model = PropertyTenantRecords
-        fields = ['id', 'tenant', 'start_date', 'end_date']
+        fields = [ 'property', 'tenant', 'start_date', 'end_date']
 
 class PropertySerializer(serializers.ModelSerializer):
     current_tenant = PropertyTenantRecordsSerializer(many=False, read_only=True)
@@ -93,3 +100,42 @@ class OwnerPropertiesSerializer(serializers.ModelSerializer):
     class Meta:
         model = User  # The owner is a User
         fields = ['id', 'username', 'owned_properties']
+        
+
+class TenancyRequestSerializer(serializers.ModelSerializer):
+    tenant_username = serializers.ReadOnlyField(source="tenant.username")
+    owner_username = serializers.ReadOnlyField(source="owner.username")
+    property_address = serializers.ReadOnlyField(source="property.full_address")
+    tenant_first_name = serializers.SerializerMethodField()
+    tenant_last_name = serializers.SerializerMethodField()
+    tenant_email = serializers.SerializerMethodField()
+    tenant_phone = serializers.SerializerMethodField()
+
+    class Meta:
+        model = TenancyRequest
+        fields = ["id", "tenant","tenant_first_name", "tenant_last_name", "tenant_email", "tenant_phone", 'tenant_rating', "tenant_username", "property", "property_address", "owner", "owner_username", "request_date", "status"]
+
+    def update(self, instance, validated_data):
+        # Check if the action is 'approve' and call the approve method on the model
+        if validated_data.get('status') == 'approved':
+            instance.approve()  # Call the model's approve method
+        
+        # You can also add any additional validation or changes before saving
+        instance.status = validated_data.get('status', instance.status)
+        instance.save()
+        return instance
+
+    def get_tenant_rating(self, obj):
+        return obj.tenant.user_rating_in_app
+    
+    def get_tenant_first_name(self, obj):
+        return obj.tenant_first_name()
+
+    def get_tenant_last_name(self, obj):
+        return obj.tenant_last_name()
+
+    def get_tenant_email(self, obj):
+        return obj.tenant_email()
+
+    def get_tenant_phone(self, obj):
+        return obj.tenant_phone()

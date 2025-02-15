@@ -1,10 +1,14 @@
 from django.db import models
-
-# Create your models here.
+from django.apps import apps
 from django.db import models
 from django.contrib.auth.models import User
 from django.utils.timezone import now
 from cloudinary.models import CloudinaryField
+from django.dispatch import receiver
+from django.db.models.signals import post_save
+from django.utils import timezone
+
+
 
 class PropertyTenantRecords(models.Model):
     property = models.ForeignKey('Property', related_name='tenant_history', on_delete=models.CASCADE)
@@ -78,3 +82,113 @@ class RoomImage(models.Model):
     
     def __str__(self):
         return self.description or "No description"
+
+
+class TenancyRequest(models.Model):
+    tenant = models.ForeignKey(User, on_delete=models.CASCADE, related_name="tenancy_requests")
+    property = models.ForeignKey(Property, on_delete=models.CASCADE, related_name="tenancy_requests")
+    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name="tenancy_requests_received")
+    request_date = models.DateTimeField(default=now)  # Use `now` directly
+    status = models.CharField(
+        max_length=20,
+        choices=[("pending", "Pending"), ("approved", "Approved"), ("rejected", "Rejected")],
+        default="pending"
+    )
+    
+    def tenant_first_name(self):
+        """Return the first name of the tenant."""
+        return self.tenant.first_name
+
+    def tenant_last_name(self):
+        """Return the last name of the tenant."""
+        return self.tenant.last_name
+
+    def tenant_email(self):
+        """Return the email of the tenant."""
+        return self.tenant.email
+
+    def tenant_phone(self):
+        """Return the phone number of the tenant from the CustomUser model."""
+        try:
+            return self.tenant.custom_user_profile.phone_number
+        except AttributeError:
+            return None
+    def tenant_rating(self):
+        """Return the tenant's rating from their custom user profile."""
+        try:
+            # Retrieve the custom user profile linked to the tenant (which is a User instance)
+            custom_user_profile = self.tenant.custom_user_profile
+            return custom_user_profile.user_rating_in_app
+        except AttributeError:
+            return None
+        
+    def approve(self):
+        """Approve the tenancy request and update tenant's address history."""
+        from roomie_user.models import CustomUser, AddressHistory
+        from roomie_property.models import PropertyTenantRecords
+
+        # Set status to approved
+        self.status = "approved"
+        self.save()
+
+        print(f"TenancyRequest {self.id} approved.")
+
+        # Get tenant's CustomUser profile
+        try:
+            custom_user = self.tenant.custom_user_profile
+        except CustomUser.DoesNotExist:
+            print(f"CustomUser profile not found for {self.tenant}")
+            return  # Exit if the CustomUser profile does not exist
+
+        # Check if the user already has a current address
+        if custom_user.address:
+            # Set end date for previous address in AddressHistory
+            AddressHistory.objects.filter(
+                user=custom_user, address=custom_user.address, end_date__isnull=True
+            ).update(end_date=timezone.now())
+
+            # Set end date for previous record in PropertyTenantRecords
+            PropertyTenantRecords.objects.filter(
+                tenant=self.tenant, property=custom_user.address, end_date__isnull=True
+            ).update(end_date=timezone.now())
+
+        # Update the user's current address
+        custom_user.address = self.property
+        custom_user.has_address = True
+        custom_user.save()
+
+        # Create new AddressHistory entry
+        AddressHistory.objects.create(
+            user=custom_user,
+            address=self.property,
+            start_date=timezone.now(),
+        )
+
+        # Create new PropertyTenantRecords entry
+        PropertyTenantRecords.objects.create(
+            property=self.property,
+            tenant=self.tenant,
+            start_date=timezone.now(),
+        )
+        
+    def reject(self):
+        """Reject the tenancy request."""
+        self.status = "rejected"
+        self.save()
+
+    def __str__(self):
+        return f"Request from {self.tenant.username} to {self.property} - {self.status}"
+# Signal to send a notification when a new tenancy request is created
+
+@receiver(post_save, sender=TenancyRequest)
+def send_notification_on_request_creation(sender, instance, created, **kwargs):
+    """Send notification to property owner when a new tenancy request is created."""
+    from communication.models import Notification
+    if created:
+        message = f"{instance.tenant.first_name} {instance.tenant.last_name} has sent a tenancy request for {instance.property.full_address()}."
+
+        Notification.objects.create(
+            sender=instance.tenant,       # Tenant is the sender
+            receiver=instance.property.owner,  # Property owner is the receiver
+            message=message
+        )

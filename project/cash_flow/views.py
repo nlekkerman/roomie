@@ -42,10 +42,25 @@ class RentPaymentViewSet(viewsets.ModelViewSet):
         return queryset
 
 
+import logging
+logger = logging.getLogger(__name__)
+
 class PropertyPaymentsViewSet(viewsets.ModelViewSet):
-    """ViewSet for managing Property Payments with embedded Property Billings"""
     queryset = PropertyPayments.objects.all().prefetch_related('property_billings')
     serializer_class = PropertyPaymentsSerializer
+
+    def list(self, request, *args, **kwargs):
+        logger.info("Received request for Property Payments list")
+        payments = self.get_queryset()
+        logger.info(f"Database query result: {payments}")  # Log the queryset result
+
+        if not payments:
+            logger.info("No payments found")
+            return Response({"message": "No property payments available."}, status=200)
+
+        serializer = self.get_serializer(payments, many=True)
+        logger.info(f"Serialized data: {serializer.data}")
+        return Response(serializer.data)
 
 class UserCashFlowViewSet(viewsets.ModelViewSet):
     """ViewSet for managing User Cash Flows with optional filters for category, status, and order to pay"""

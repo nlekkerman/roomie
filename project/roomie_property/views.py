@@ -2,15 +2,20 @@
 
 from rest_framework import viewsets, status
 from rest_framework.views import APIView
-from .models import Property, RoomImage
-from .serializers import PropertySerializer, OwnerPropertiesSerializer, RoomImageSerializer
+from .models import Property, RoomImage, TenancyRequest
+from roomie_user.serializers import CustomUserSerializer
+from communication.serializers import NotificationSerializer
+from .serializers import PropertySerializer, OwnerPropertiesSerializer, RoomImageSerializer, TenancyRequestSerializer
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.exceptions import ValidationError
 from rest_framework.decorators import action
 import cloudinary.uploader
-
+from roomie_user.models import CustomUser
+from communication.models import Notification
+from django.apps import apps
+from django.utils import timezone
 
 class PropertyViewSet(viewsets.ModelViewSet):
     queryset = Property.objects.all()
@@ -206,8 +211,6 @@ class PropertyUpdateTextFieldsView(APIView):
             print(f"Error: {e}")
             return Response({"detail": "An error occurred while updating the property."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-
-
 class RoomImageUploadView(APIView):
     parser_classes = (MultiPartParser, FormParser)
 
@@ -262,3 +265,145 @@ class RoomImageUploadView(APIView):
 
         serializer = RoomImageSerializer(room_image)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
+class AllCustomUsersView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        users = CustomUser.objects.all()
+        serializer = CustomUserSerializer(users, many=True)
+        return Response(serializer.data)
+    
+class TenancyRequestViewSet(viewsets.ModelViewSet):
+    queryset = TenancyRequest.objects.all()
+    serializer_class = TenancyRequestSerializer
+    permission_classes = [IsAuthenticated]  # Ensure the user is authenticated
+
+    def list(self, request, *args, **kwargs):
+        """
+        List all TenancyRequest instances for the authenticated user.
+        """
+        user = request.user
+        tenancy_requests = TenancyRequest.objects.filter(owner=user)
+        serializer = self.get_serializer(tenancy_requests, many=True)
+        return Response(serializer.data)
+
+    def create(self, request, *args, **kwargs):
+        """
+        Create a new TenancyRequest instance when a user requests a property.
+        """
+        if not request.user.is_authenticated:
+            return Response({"error": "Authentication is required to create a tenancy request."},
+                            status=status.HTTP_401_UNAUTHORIZED)
+
+        try:
+            property_id = request.data.get('property_id')
+            if not property_id:
+                return Response({"error": "Property ID is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+            tenant = request.user  # Get authenticated user (tenant)
+
+            try:
+                property_instance = Property.objects.get(id=property_id)
+            except Property.DoesNotExist:
+                return Response({"error": "Property not found."}, status=status.HTTP_404_NOT_FOUND)
+
+            owner = property_instance.owner
+
+            # Create the tenancy request
+            tenancy_request = TenancyRequest.objects.create(
+                property=property_instance,
+                tenant=tenant,  # The tenant is the authenticated user
+                owner=owner,    # The owner is from the property
+                status='pending'
+            )
+
+            # Return the response with the created tenancy request details
+            return Response(TenancyRequestSerializer(tenancy_request).data, status=status.HTTP_201_CREATED)
+
+        except Exception as e:
+            print(f"Error creating tenancy request: {e}")
+            return Response({"error": "An error occurred while sending the tenancy request."},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=True, methods=['post'])
+    def approve(self, request, pk=None):
+        print(f"Attempting to fetch TenancyRequest with pk: {pk}")
+
+        # Get the TenancyRequest instance using the primary key (pk)
+        tenancy_request = self.get_object()
+
+        print(f"TenancyRequest found: {tenancy_request.id}, Status: {tenancy_request.status}")
+        
+        try:
+            # Call the 'approve' method on the model to handle the logic
+            print("Calling the 'approve' method on TenancyRequest instance...")
+            tenancy_request.approve()
+
+            print("TenancyRequest approved successfully.")
+            
+            # Return a successful response
+            return Response({"status": "approved"}, status=status.HTTP_200_OK)
+        
+        except ValueError as e:
+            # If the request is not in 'pending' status
+            print(f"Error: {str(e)}")
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+        except Exception as e:
+            # For any other errors (e.g., database errors)
+            print(f"An error occurred during approval: {e}")
+            return Response({"error": "An error occurred while processing the approval."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+    # Custom action to reject a tenancy request
+    @action(detail=True, methods=['post'])
+    def reject(self, request, pk=None):
+        tenancy_request = self.get_object()
+        if tenancy_request.status == "pending":
+            tenancy_request.status = "rejected"
+            tenancy_request.save()
+            return Response({"status": "rejected"}, status=status.HTTP_200_OK)
+        return Response({"error": "Invalid status for rejection."}, status=status.HTTP_400_BAD_REQUEST)
+
+class TenantTenancyRequestViewSet(viewsets.ModelViewSet):
+    """
+    List all TenancyRequest instances where the authenticated user is the tenant.
+    """
+    queryset = TenancyRequest.objects.all()
+    serializer_class = TenancyRequestSerializer
+    permission_classes = [IsAuthenticated]
+
+    def list(self, request, *args, **kwargs):
+        """
+        List all TenancyRequest instances for the authenticated user where they are the tenant.
+        """
+       
+        tenancy_requests = TenancyRequest.objects.filter(tenant=request.user)
+        
+        # Optionally filter by status if provided
+        status_param = request.query_params.get('status', None)
+        if status_param:
+            tenancy_requests = tenancy_requests.filter(status=status_param)
+
+        # Serialize and return data
+        serializer = self.get_serializer(tenancy_requests, many=True)
+        return Response(serializer.data)
+
+    def destroy(self, request, *args, **kwargs):
+        """
+        Delete a TenancyRequest instance for the authenticated user where they are the tenant.
+        """
+        try:
+            # Get the TenancyRequest instance
+            tenancy_request = self.get_object()
+
+            # Ensure the request belongs to the authenticated user (tenant)
+            if tenancy_request.tenant != request.user:
+                return Response({'detail': 'You are not authorized to delete this request.'}, status=status.HTTP_403_FORBIDDEN)
+
+            # Delete the tenancy request
+            tenancy_request.delete()
+
+            return Response({'detail': 'Request deleted successfully.'}, status=status.HTTP_204_NO_CONTENT)
+
+        except TenancyRequest.DoesNotExist:
+            return Response({'detail': 'Request not found.'}, status=status.HTTP_404_NOT_FOUND)

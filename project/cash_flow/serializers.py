@@ -81,8 +81,8 @@ class PropertyPaymentsSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
     def get_property_billings(self, obj):
-        """Fetches and serializes related PropertyBilling objects for this PropertyPayments"""
-        return [
+        # Serialize the related PropertyBilling objects
+        billings_data = [
             {
                 "tenant": billing.tenant.username,
                 "amount": billing.amount,
@@ -92,3 +92,5 @@ class PropertyPaymentsSerializer(serializers.ModelSerializer):
             }
             for billing in obj.property_billings.all()
         ]
+        print(f"Property Billings for payment {obj.id}: ", billings_data)  # Print the serialized billing data
+        return billings_data

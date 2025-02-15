@@ -38,24 +38,28 @@ class AddressHistoryInline(admin.TabularInline):
             qs = qs.filter(user_id=user_id)
         return qs
 
-# Custom User Admin
 class CustomUserAdmin(admin.ModelAdmin):
-    list_display = ('user', 'address', 'first_name', 'last_name', 'phone_number', 'user_rating_in_app', 'has_address','profile_image')
+    list_display = ('user', 'address', 'first_name', 'last_name', 'phone_number', 'user_rating_in_app', 'has_address', 'profile_image')
     search_fields = ('user__username', 'first_name', 'last_name', 'email')
     list_filter = ('has_address', 'user_rating_in_app')
     ordering = ('user__username',)
 
     fieldsets = (
         (None, {
-            'fields': ('user', 'first_name', 'last_name', 'email', 'phone_number', 'user_rating_in_app', 'address', 'has_address','profile_image')
+            'fields': ('user', 'first_name', 'last_name', 'email', 'phone_number', 'user_rating_in_app', 'address', 'has_address', 'profile_image')
         }),
     )
 
-    inlines = [AddressHistoryInline]  # Include the AddressHistoryInline in the CustomUser admin
+    inlines = [AddressHistoryInline]
 
     def save_model(self, request, obj, form, change):
-        # Override save to ensure the address history is updated
-        obj.save()
+        # Ensure the address field is properly saved
+        if obj.address:
+            obj.has_address = True
+        else:
+            obj.has_address = False
+
+        # Handle address history
         if change:  # Only update address history if updating an existing user
             old_address = CustomUser.objects.get(pk=obj.pk).address
             if obj.address != old_address:
@@ -71,6 +75,6 @@ class CustomUserAdmin(admin.ModelAdmin):
                         address=obj.address, 
                         start_date=timezone.now()
                     )
+        obj.save()
 
-# Register the models
 admin.site.register(CustomUser, CustomUserAdmin)

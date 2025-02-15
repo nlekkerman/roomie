@@ -1,8 +1,9 @@
 from django.db import models
 from django.utils.timezone import now
 from cloudinary.models import CloudinaryField
-from roomie_property.models import Property  # Import Property
-
+from roomie_property.models import Property 
+from roomie_user.models import CustomUser 
+from django.contrib.auth.models import User
 class DamageRepairReport(models.Model):
     REPORT_STATUS_CHOICES = [
         ('pending', 'Pending'),
@@ -43,3 +44,17 @@ class RepairImage(models.Model):
     )
     image = CloudinaryField('image')
     description = models.CharField(max_length=255, blank=True, null=True)
+
+class Notification(models.Model):
+    sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sent_notifications', null=True)  # Logged-in user
+    receiver = models.ForeignKey(User, on_delete=models.CASCADE, related_name='received_notifications',null=True)  # Property owner
+    message = models.TextField()
+    created_at = models.DateTimeField(default=now)
+    is_read = models.BooleanField(default=False)
+
+    def __str__(self):
+        sender_username = self.sender.username if self.sender else "Unknown Sender"
+        receiver_username = self.receiver.username if self.receiver else "Unknown Receiver"
+        return f"Notification from {sender_username} to {receiver_username}: {self.message[:50]}"
+    class Meta:
+        ordering = ['-created_at']
