@@ -37,10 +37,12 @@ class PropertyTenantRecordsSerializer(serializers.ModelSerializer):
     tenant = serializers.PrimaryKeyRelatedField(queryset=User.objects.all())  # Assuming User model is being used for tenant
     start_date = serializers.DateField()
     end_date = serializers.DateField(allow_null=True)
+    tenant_username = serializers.CharField(source='tenant.username', read_only=True)  # Adding tenant's username
+
 
     class Meta:
         model = PropertyTenantRecords
-        fields = [ 'property', 'tenant', 'start_date', 'end_date']
+        fields = ['property','tenant_username', 'tenant', 'start_date', 'end_date']
 
 class PropertySerializer(serializers.ModelSerializer):
     current_tenant = PropertyTenantRecordsSerializer(many=False, read_only=True)
@@ -91,16 +93,9 @@ class PropertySerializer(serializers.ModelSerializer):
         return instance
 
 class OwnerPropertiesSerializer(serializers.ModelSerializer):
-    # This serializer returns properties owned by the user
     class Meta:
         model = Property
         fields = ['id', 'street', 'house_number', 'town', 'county', 'country', 'property_rating', 'rent_amount', 'deposit_amount', 'main_image']
-    owned_properties = PropertySerializer(many=True, read_only=True)
-
-    class Meta:
-        model = User  # The owner is a User
-        fields = ['id', 'username', 'owned_properties']
-        
 
 class TenancyRequestSerializer(serializers.ModelSerializer):
     tenant_username = serializers.ReadOnlyField(source="tenant.username")

@@ -4,7 +4,7 @@ from rest_framework import serializers
 from .models import UserCashFlow, PropertyCashFlow, PropertyPayments, PropertyBilling, TenantBilling,RentPayment
 from roomie_property.models import Property
 from django.contrib.auth.models import User
-from datetime import datetime
+from datetime import datetime, date
 # User serializer
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
@@ -13,6 +13,7 @@ class UserSerializer(serializers.ModelSerializer):
 
 class RentPaymentSerializer(serializers.ModelSerializer):
     tenant_billings = serializers.SerializerMethodField()
+    deadline = serializers.DateField()
 
     class Meta:
         model = RentPayment
@@ -30,6 +31,29 @@ class RentPaymentSerializer(serializers.ModelSerializer):
             }
             for billing in obj.tenant_billings.all()
         ]
+
+    def to_representation(self, instance):
+        """Ensure 'date' and 'deadline' fields are correctly formatted as 'YYYY-MM-DD'."""
+        data = super().to_representation(instance)
+
+        # Convert 'date' field if it's a datetime
+        if isinstance(instance.date, (datetime, date)):  # ✅ Safe type check
+            data["date"] = instance.date.isoformat()  # Convert to 'YYYY-MM-DD' string
+
+        # Convert 'deadline' field if it's a datetime
+        if isinstance(instance.deadline, (datetime, date)):  # ✅ Safe type check
+            data["deadline"] = instance.deadline.isoformat()
+
+        # Handle tenant_billing fallback for deadline
+        if not data.get("deadline"):  # ✅ More reliable than `if "deadline" not in data or data["deadline"] is None`
+            tenant_billing = instance.tenant_billings.first()
+            if tenant_billing and isinstance(tenant_billing.deadline, (datetime, date)):
+                data["deadline"] = tenant_billing.deadline.isoformat()
+            else:
+                data["deadline"] = None  # Default value if no valid deadline
+
+        return data
+
 # UserCashFlow serializer
 class UserCashFlowSerializer(serializers.ModelSerializer):
     user = UserSerializer(read_only=True)

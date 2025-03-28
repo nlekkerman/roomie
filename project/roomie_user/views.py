@@ -15,9 +15,7 @@ class CustomUserProfileView(APIView):
         try:
             custom_user = CustomUser.objects.get(user=request.user)
             
-            # Debugging: Print custom_user properties
-            print("Fetched Custom User:", custom_user)
-            
+           
             # Fetch the current address
             current_address = AddressHistory.objects.filter(
                 user=custom_user, 
@@ -25,11 +23,7 @@ class CustomUserProfileView(APIView):
             ).first()
 
             # Debugging: Print the current address if available
-            if current_address and current_address.address:
-                print("Current Address:", current_address.address.full_address())
-            else:
-                print("No current address found.")
-
+            
             # Fetch address history
             address_history = AddressHistory.objects.filter(user=custom_user, end_date__isnull=False).order_by('-start_date')
 

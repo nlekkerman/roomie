@@ -209,6 +209,9 @@ CORS_ALLOW_HEADERS = [
 ]
 REST_FRAMEWORK = {
     
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'PAGE_SIZE': 6,  # Number of items per page
+    
     'DEFAULT_RENDERER_CLASSES': [
         'rest_framework.renderers.JSONRenderer',
         'rest_framework.renderers.BrowsableAPIRenderer',
@@ -223,9 +226,11 @@ REST_FRAMEWORK = {
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ],
 }
-SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=230),  # Shorter lifetime for the access token (e.g., 30 minutes)
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),  # Longer lifetime for the refresh token (e.g., 1 day)
-    'ROTATE_REFRESH_TOKENS': True,  # Ensure refresh token rotation (get a new refresh token on every use)
-    'BLACKLIST_AFTER_ROTATION': True,  # Blacklist the old refresh token after it is rotated
+
+
+IMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=100),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
+    'ROTATE_REFRESH_TOKENS': True,
+    'BLACKLIST_AFTER_ROTATION': True,
 }

@@ -11,89 +11,61 @@ from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.exceptions import ValidationError
 from rest_framework.decorators import action
+from rest_framework.pagination import PageNumberPagination
 import cloudinary.uploader
 from roomie_user.models import CustomUser
-from communication.models import Notification
-from django.apps import apps
-from django.utils import timezone
+from PIL import Image
+from io import BytesIO
+from django.core.files.base import ContentFile
+
+
+class PropertyPagination(PageNumberPagination):
+    page_size = 6
+    page_size_query_param = 'page_size'
+    max_page_size = 100
 
 class PropertyViewSet(viewsets.ModelViewSet):
     queryset = Property.objects.all()
     serializer_class = PropertySerializer
     parser_classes = [MultiPartParser, FormParser]
-    # Ensure only authenticated users can create a property
+    pagination_class = PropertyPagination
 
     def create(self, request, *args, **kwargs):
-        
         try:
-            print(f"Request data received: {request.data}") 
-            # Set the authenticated user as the owner of the new property
-            request.data['owner'] = request.user.id  # The 'owner' field is the User object
+            print(f"Request data received: {request.data}")
+            request.data['owner'] = request.user.id  
             if 'folio_number' in request.data:
                 print(f"folio_number: {request.data['folio_number']}")
-            # If the request includes images or other fields, they will be handled by the serializer
             return super().create(request, *args, **kwargs)
-
         except Exception as e:
             print(f"Error creating property: {e}")
             return Response({"error": "An error occurred while creating the property."},
                             status=status.HTTP_400_BAD_REQUEST)
 
-    
     def partial_update(self, request, *args, **kwargs):
-        """Handles PATCH requests for updating images"""
-
         try:
-            
             property_instance = self.get_object()
             
             if 'delete_image_public_id' in request.data:
                 delete_image_public_id = request.data['delete_image_public_id']
                 print(f"Attempting to delete image with Cloudinary public ID: {delete_image_public_id}")
-
-                # Delete the image from Cloudinary using the public ID
-                cloudinary.uploader.destroy(delete_image_public_id)  # Remove the image from Cloudinary
-                print(f"Deleted image with Cloudinary public ID: {delete_image_public_id}")
-
-                # Delete the image from the database as well
+                cloudinary.uploader.destroy(delete_image_public_id)  
                 room_image = property_instance.room_images.filter(image__contains=delete_image_public_id).first()
                 if room_image:
                     room_image.delete()
                     print(f"Deleted image with public ID: {delete_image_public_id} from the database.")
-                else:
-                    print(f"No matching image found in database for public ID {delete_image_public_id}")
-            # Handle main image update
+            
             if 'main_image' in request.FILES:
                 property_instance.main_image = request.FILES['main_image']
                 property_instance.save()
                 print(f"Main image updated: {property_instance.main_image.url}")
 
-            # Handle room images update
             if 'room_image' in request.FILES:
                 room_images = request.FILES.getlist('room_image')
                 print(f"Inside partial_update method. Room images count: {len(room_images)}")
 
-                # Get existing image filenames (Cloudinary public IDs or extracted filenames)
-                existing_images = [
-                    img.image.public_id.split("/")[-1] for img in property_instance.room_images.all()
-                ]
-                print(f"Existing images filenames: {existing_images}")
-
                 for img in room_images:
                     print(f"Adding room image: {img.name}")
-
-                    # Extract the public ID from the image URL (assumed to be passed from frontend)
-                    img_public_id = img.name.split("/").pop().split(".")[0]  # Extract Cloudinary public ID
-                    print(f"Deleting old image: {img_public_id}")
-                    
-                    # Check if the image exists in the database and delete it
-                    if 'existing_image_public_id' in request.data:
-                        existing_public_id = request.data['existing_image_public_id']
-                        # Delete the image using the existing public ID
-                        property_instance.room_images.filter(image__contains=existing_public_id).delete()
-                        print(f"Deleted old image with public ID: {existing_public_id}")
-
-                    # Save new image
                     RoomImage.objects.create(
                         property=property_instance,
                         image=img,
@@ -108,37 +80,60 @@ class PropertyViewSet(viewsets.ModelViewSet):
 
         except Exception as e:
             print(f"Error: {e}")
-            raise ValidationError("An error occurred while updating the property.")
-
+            return Response({"error": "An error occurred while updating the property."},
+                            status=status.HTTP_400_BAD_REQUEST)
 
 class OwnerDashboardView(APIView):
     permission_classes = [IsAuthenticated]
+    pagination_class = PropertyPagination  # Use pagination class
 
     def get(self, request):
-        # Get the logged-in user (owner)
-        owner = request.user  
+        # ✅ Get the logged-in owner
+        owner = request.user
+        # ✅ Fetch owned properties
+        owner_properties = Property.objects.filter(owner=owner)
+
+        # Apply pagination
+        paginator = self.pagination_class()
+        result_page = paginator.paginate_queryset(owner_properties, request)
         
-        # Fetch the properties owned by the logged-in user
-        owner_properties = Property.objects.filter(owner=owner)  # Query properties owned by the logged-in user
-        
-        # Serialize the properties data
-        serializer = OwnerPropertiesSerializer(owner_properties, many=True)
-        
-        # Return the serialized data
-        return Response(serializer.data)
+        # Serialize the paginated data
+        serializer = PropertySerializer(result_page, many=True)
+
+        # Return the paginated response
+        return paginator.get_paginated_response(serializer.data) 
 
 class PropertyCreateView(APIView):
     parser_classes = [MultiPartParser, FormParser]  # To handle file uploads (image files)
 
-    def post(self, request, *args, **kwargs):
-        # Handling the creation of the property with the main image and room images
-        property_data = request.data.copy()  # Copy request data to ensure we don't modify the original
+    def convert_to_webp(self, image):
+        """Convert and resize image to WebP format"""
+        img = Image.open(image)
 
-        # Retrieve the files (images)
+        # Resize if needed (e.g., max 800x800)
+        max_size = (800, 800)
+        img.thumbnail(max_size)
+
+        # Convert to WebP
+        img_io = BytesIO()
+        img.save(img_io, format='WEBP', quality=80)
+
+        # Return converted image
+        return ContentFile(img_io.getvalue(), name=f"{image.name.split('.')[0]}.webp")
+
+    def post(self, request, *args, **kwargs):
+        # Copy request data
+        property_data = request.data.copy()
+
+        # Retrieve files (images)
         main_image = request.FILES.get('main_image')
         room_images = request.FILES.getlist('room_images')
 
-        # Create the Property instance with owner automatically set to the logged-in user
+        # Convert main image to WebP
+        if main_image:
+            main_image = self.convert_to_webp(main_image)
+
+        # Create Property instance
         property = Property.objects.create(
             street=property_data['street'],
             house_number=property_data['house_number'],
@@ -157,15 +152,16 @@ class PropertyCreateView(APIView):
             owner=request.user
         )
 
-        # Handling room images if any
+        # Convert and save room images
         for img in room_images:
+            converted_img = self.convert_to_webp(img)
             RoomImage.objects.create(
                 property=property,
-                image=img,
-                description='Room image description'  # You can add logic to dynamically set description
+                image=converted_img,
+                description='Room image description'
             )
 
-        # Return the property data with the owner info
+        # Return response
         return Response(PropertySerializer(property).data, status=status.HTTP_201_CREATED)
     
 class PropertyUpdateTextFieldsView(APIView):
@@ -407,3 +403,18 @@ class TenantTenancyRequestViewSet(viewsets.ModelViewSet):
 
         except TenancyRequest.DoesNotExist:
             return Response({'detail': 'Request not found.'}, status=status.HTTP_404_NOT_FOUND)
+        
+class OwnerPaymentView(APIView):
+    permission_classes = [IsAuthenticated]  # Ensure the user is authenticated
+
+    def get(self, request):
+        # Get the logged-in user
+        user = request.user
+        # Filter properties by the owner (logged-in user)
+        properties = Property.objects.filter(owner=user)
+        
+        # Serialize the filtered properties
+        serializer = PropertySerializer(properties, many=True)
+        
+        # Return the serialized data in the response
+        return Response(serializer.data, status=status.HTTP_200_OK)

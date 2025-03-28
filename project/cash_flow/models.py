@@ -185,25 +185,28 @@ class PropertyCashFlow(models.Model):
         # Log after saving
         logger.info(f"Saved PropertyCashFlow instance: Property ID: {self.property.id} - {self.category} - {self.amount} - Status: {self.status}")
 
-               
+
+def get_current_date():
+    return timezone.now().date()
 
 class RentPayment(models.Model):
     property = models.ForeignKey('roomie_property.Property', related_name='rent_payments', on_delete=models.CASCADE)
     amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)  # Rent amount
-    date = models.DateField(default=timezone.now)
+    date = models.DateField(default=get_current_date)
     description = models.CharField(max_length=255, default="Rent payment")
     status = models.CharField(max_length=50, choices=[('paid', 'Paid'), ('pending', 'Pending')], default='pending')
     deadline = models.DateField(null=True, blank=True)
 
     def __str__(self):
         return f"Rent payment for property {self.property.id} - {self.amount} ({self.date})"
-
+   
+    
     def save(self, *args, **kwargs):
         """Automatically calculate rent and split it among tenants, avoiding duplicate billing."""
         if not self.amount:
             self.amount = self.property.rent_amount  # Use the rent amount from the Property model if not provided
 
-        super().save(*args, **kwargs)  # Save the RentPayment instance
+        super().save(*args, **kwargs)
 
         # Fetch all current tenants for this property (those with no end_date)
         current_tenants = self.property.tenant_history.filter(end_date__isnull=True)
